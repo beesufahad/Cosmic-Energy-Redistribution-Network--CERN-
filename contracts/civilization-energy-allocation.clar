@@ -1,100 +1,104 @@
-;; Stellar Energy Harvesting Contract
-;; Manages the harvesting of energy from stellar sources
+;; Civilization Energy Allocation Contract
+;; Manages the allocation of energy to different civilizations
 
 (define-data-var admin principal tx-sender)
 
-;; Data structure for stellar energy sources
-(define-map stellar-sources
-  { source-id: uint }
+;; Data structure for civilizations
+(define-map civilizations
+  { civilization-id: uint }
   {
-    source-name: (string-ascii 100),
-    harvester: principal,
-    coordinates: (list 3 int),
-    energy-type: (string-ascii 30),
-    output-capacity: uint,
-    current-output: uint,
-    last-harvested: uint,
+    civilization-name: (string-ascii 100),
+    representative: principal,
+    location: (list 3 int),
+    technological-level: uint,
+    energy-quota: uint,
+    energy-consumed: uint,
+    last-allocation: uint,
     status: (string-ascii 20)
   }
 )
 
-;; Harvesting records
-(define-map harvesting-records
+;; Allocation records
+(define-map allocation-records
   { record-id: uint }
   {
-    source-id: uint,
-    harvester: principal,
+    civilization-id: uint,
     energy-amount: uint,
-    timestamp: uint
+    allocation-reason: (string-ascii 100),
+    timestamp: uint,
+    allocator: principal
   }
 )
 
-;; Counter for source IDs
-(define-data-var next-source-id uint u1)
+;; Counter for civilization IDs
+(define-data-var next-civilization-id uint u1)
 ;; Counter for record IDs
 (define-data-var next-record-id uint u1)
 
-;; Register a new stellar energy source
-(define-public (register-source
-  (source-name (string-ascii 100))
-  (coordinates (list 3 int))
-  (energy-type (string-ascii 30))
-  (output-capacity uint))
-  (let ((source-id (var-get next-source-id)))
-    (map-set stellar-sources
-      { source-id: source-id }
+;; Register a new civilization
+(define-public (register-civilization
+  (civilization-name (string-ascii 100))
+  (location (list 3 int))
+  (technological-level uint))
+  (let ((civilization-id (var-get next-civilization-id)))
+    (map-set civilizations
+      { civilization-id: civilization-id }
       {
-        source-name: source-name,
-        harvester: tx-sender,
-        coordinates: coordinates,
-        energy-type: energy-type,
-        output-capacity: output-capacity,
-        current-output: u0,
-        last-harvested: block-height,
+        civilization-name: civilization-name,
+        representative: tx-sender,
+        location: location,
+        technological-level: technological-level,
+        energy-quota: (* technological-level u1000),
+        energy-consumed: u0,
+        last-allocation: block-height,
         status: "active"
       }
     )
-    (var-set next-source-id (+ source-id u1))
-    (ok source-id)
+    (var-set next-civilization-id (+ civilization-id u1))
+    (ok civilization-id)
   )
 )
 
-;; Harvest energy from a source
-(define-public (harvest-energy (source-id uint) (energy-amount uint))
+;; Allocate energy to a civilization
+(define-public (allocate-energy
+  (civilization-id uint)
+  (energy-amount uint)
+  (allocation-reason (string-ascii 100)))
   (let (
-    (source (default-to
+    (civilization (default-to
       {
-        source-name: "",
-        harvester: tx-sender,
-        coordinates: (list 0 0 0),
-        energy-type: "",
-        output-capacity: u0,
-        current-output: u0,
-        last-harvested: u0,
+        civilization-name: "",
+        representative: tx-sender,
+        location: (list 0 0 0),
+        technological-level: u0,
+        energy-quota: u0,
+        energy-consumed: u0,
+        last-allocation: u0,
         status: ""
       }
-      (map-get? stellar-sources { source-id: source-id })))
+      (map-get? civilizations { civilization-id: civilization-id })))
     (record-id (var-get next-record-id))
-    (new-output (+ (get current-output source) energy-amount))
+    (new-consumed (+ (get energy-consumed civilization) energy-amount))
     )
 
-    ;; Record harvesting
-    (map-set harvesting-records
+    ;; Record allocation
+    (map-set allocation-records
       { record-id: record-id }
       {
-        source-id: source-id,
-        harvester: tx-sender,
+        civilization-id: civilization-id,
         energy-amount: energy-amount,
-        timestamp: block-height
+        allocation-reason: allocation-reason,
+        timestamp: block-height,
+        allocator: tx-sender
       }
     )
 
-    ;; Update source
-    (map-set stellar-sources
-      { source-id: source-id }
-      (merge source {
-        current-output: new-output,
-        last-harvested: block-height
+    ;; Update civilization
+    (map-set civilizations
+      { civilization-id: civilization-id }
+      (merge civilization {
+        energy-consumed: new-consumed,
+        last-allocation: block-height
       })
     )
 
@@ -103,37 +107,44 @@
   )
 )
 
-;; Deactivate a source
-(define-public (deactivate-source (source-id uint))
+;; Update civilization technological level
+(define-public (update-tech-level (civilization-id uint) (new-tech-level uint))
   (let (
-    (source (default-to
+    (civilization (default-to
       {
-        source-name: "",
-        harvester: tx-sender,
-        coordinates: (list 0 0 0),
-        energy-type: "",
-        output-capacity: u0,
-        current-output: u0,
-        last-harvested: u0,
+        civilization-name: "",
+        representative: tx-sender,
+        location: (list 0 0 0),
+        technological-level: u0,
+        energy-quota: u0,
+        energy-consumed: u0,
+        last-allocation: u0,
         status: ""
       }
-      (map-get? stellar-sources { source-id: source-id })))
+      (map-get? civilizations { civilization-id: civilization-id })))
+    (new-quota (* new-tech-level u1000))
     )
-    (map-set stellar-sources
-      { source-id: source-id }
-      (merge source { status: "inactive" })
+
+    ;; Update civilization
+    (map-set civilizations
+      { civilization-id: civilization-id }
+      (merge civilization {
+        technological-level: new-tech-level,
+        energy-quota: new-quota
+      })
     )
-    (ok true)
+
+    (ok new-quota)
   )
 )
 
-;; Get source details
-(define-read-only (get-source (source-id uint))
-  (map-get? stellar-sources { source-id: source-id })
+;; Get civilization details
+(define-read-only (get-civilization (civilization-id uint))
+  (map-get? civilizations { civilization-id: civilization-id })
 )
 
-;; Get harvesting record
-(define-read-only (get-harvesting-record (record-id uint))
-  (map-get? harvesting-records { record-id: record-id })
+;; Get allocation record
+(define-read-only (get-allocation-record (record-id uint))
+  (map-get? allocation-records { record-id: record-id })
 )
 

@@ -7,3 +7,5 @@
 ,tests/civilization-energy-allocation.test.ts,b/0/b0d0a9d9673a8d577a7c3b900567cc1c41d2380b
 W
 'tests/stellar-energy-harvesting.test.ts,7/6/7650173733bda768f8489a8a609d9e6b92e52605
+X
+(contracts/stellar-energy-harvesting.clar,b/a/bad58a24b73f9ded66b5c6f4ea7aedf4a550ea95
